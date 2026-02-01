@@ -44,7 +44,7 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Admin auth routes
-  const adminAuthRoutes = ['/admin/auth/signin']
+  const adminAuthRoutes = ['/admin/auth/signin', '/admin/signin']
   const isAdminAuthRoute = adminAuthRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
   )

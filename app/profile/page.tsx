@@ -55,12 +55,10 @@ export default function ProfilePage() {
   const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
   const supabase = createClient();
 
-  // Effect to mark client-side hydration complete
   React.useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // Effect to populate form when profile is loaded
   React.useEffect(() => {
     if (profile) {
       setForm({
@@ -71,11 +69,9 @@ export default function ProfilePage() {
     }
   }, [profile]);
 
-  // Effect to fetch profile data
   React.useEffect(() => {
     if (authLoading || !authUser) return;
 
-    // Fetch profile from profiles table, fallback to auth user
     (async () => {
       try {
         const { data, error } = await supabase.from('profiles').select('*').eq('id', authUser.id).maybeSingle();
@@ -100,7 +96,6 @@ export default function ProfilePage() {
             avatar_url: data.avatar_url || undefined,
           });
         } else {
-          // Not found, use auth data
           setProfile({
             name: authUser.user_metadata?.full_name || authUser.email,
             email: authUser.email,
@@ -124,7 +119,6 @@ export default function ProfilePage() {
     })();
   }, [authLoading, authUser, supabase]);
 
-  // Early returns after all hooks
   if (!isClient || authLoading) {
     return (
       <div className="dashboard-loading">
@@ -159,11 +153,9 @@ export default function ProfilePage() {
       const { error: upsertError } = await supabase.from('profiles').upsert(payload);
       if (upsertError) throw upsertError;
 
-      // Also update auth user metadata (display name)
       const { error: authErr } = await supabase.auth.updateUser({ data: { full_name: form.name } });
       if (authErr) console.warn('Could not update auth user metadata', authErr);
 
-      // Update local UI
       setProfile((prev: any) => ({ ...(prev || {}), name: form.name, phone: form.phone, accountType: form.accountType }));
       setEditing(false);
       setStatusMessage('Profile saved');
@@ -179,7 +171,6 @@ export default function ProfilePage() {
   return (
     <div className="dashboard-container">
       <div className="dashboard-app">
-        {/* HEADER */}
         <header className="header">
           <div className="header-left">
             <Link href="/dashboard" className="header-back">
@@ -210,11 +201,9 @@ export default function ProfilePage() {
           </div>
         </header>
 
-        {/* PROFILE CARD */}
         <section className="profile-card">
           <div className="profile-avatar">
             {profile?.avatar_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img src={profile.avatar_url} alt={profile.name} style={{ width: '100%', height: '100%', borderRadius: '50%' }} />
             ) : (
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -234,7 +223,6 @@ export default function ProfilePage() {
           </div>
         </section>
 
-        {/* KYC SECTION */}
         <section className="kyc-section">
           <h3 className="section-title">Identity Verification</h3>
           <div className="kyc-card">
@@ -275,7 +263,6 @@ export default function ProfilePage() {
           </div>
         </section>
 
-        {/* PERSONAL INFO */}
         <section className="info-section">
           <h3 className="section-title">Personal Information</h3>
           <div className="list-card">
@@ -343,7 +330,6 @@ export default function ProfilePage() {
           </div>
         </section>
 
-        {/* ACCOUNT SETTINGS */}
         <section className="info-section">
           <h3 className="section-title">Account Settings</h3>
           <div className="list-card">
@@ -389,4 +375,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-

@@ -37,13 +37,16 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         .single()
 
       if (error) {
-        console.error('Error checking admin status:', error)
+        // Don't log errors for "not found" - this is expected for users without profiles
+        if (error.code !== 'PGRST116') {
+          console.warn('Could not verify admin status:', error.message)
+        }
         return false
       }
 
       return data?.is_admin === true
     } catch {
-      console.error('Error checking admin status')
+      console.warn('Error checking admin status')
       return false
     }
   }
