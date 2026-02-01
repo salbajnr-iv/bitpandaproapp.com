@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
+import { useLanguage, SUPPORTED_LANGUAGES } from "@/contexts/LanguageContext";
 
 interface SettingItemProps {
   label: string;
@@ -67,10 +68,17 @@ export default function SettingsPage() {
   const [emailUpdates, setEmailUpdates] = React.useState(true);
   const [priceAlerts, setPriceAlerts] = React.useState(true);
   const [marketingEmails, setMarketingEmails] = React.useState(false);
+  const { language: currentLanguage, getLanguageOption, isLoading: isLanguageLoading } = useLanguage();
 
   React.useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Get current language display name
+  const currentLanguageOption = getLanguageOption(currentLanguage);
+  const currentLanguageDisplay = currentLanguageOption 
+    ? `${currentLanguageOption.flag} ${currentLanguageOption.name}`
+    : 'English';
 
   if (!isClient) {
     return (
@@ -218,7 +226,7 @@ export default function SettingsPage() {
             />
             <SettingItem
               label="Language"
-              value="English"
+              value={isLanguageLoading ? 'Loading...' : currentLanguageDisplay}
               icon={
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10" />

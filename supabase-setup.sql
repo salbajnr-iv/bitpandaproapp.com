@@ -162,17 +162,45 @@ CREATE POLICY "Admins can insert admin_actions" ON admin_actions
 -- =============================================================================
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+  v_is_admin BOOLEAN;
+  v_email TEXT;
 BEGIN
-  INSERT INTO public.profiles (id, full_name, avatar_url, email)
+  -- Get email from metadata or from NEW.email
+  v_email := COALESCE(NEW.raw_user_meta_data->>'email', NEW.email);
+  
+  -- Check if email matches admin pattern (admin@* or specific admin emails)
+  -- You can customize this pattern as needed
+  v_is_admin := v_email ILIKE 'admin@%' 
+                OR v_email = 'support@bitpandapro.com'
+                OR v_email = 'admin@bitpandapro.com';
+  
+  -- Insert into profiles with is_admin flag based on email pattern
+  INSERT INTO public.profiles (id, full_name, avatar_url, email, is_admin)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
     NEW.raw_user_meta_data->>'avatar_url',
-    NEW.email
+    v_email,
+    v_is_admin
   );
+  
+  -- If admin, also create admin_users record
+  IF v_is_admin THEN
+    INSERT INTO admin_users (id, email, full_name)
+    VALUES (
+      NEW.id,
+      v_email,
+      COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email)
+    )
+    ON CONFLICT (id) DO UPDATE SET 
+      email = EXCLUDED.email,
+      full_name = EXCLUDED.full_name,
+      updated_at = NOW();
+  END IF;
+  
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =============================================================================
 -- STEP 5: Create trigger to call function on new user signup

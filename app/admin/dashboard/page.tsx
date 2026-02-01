@@ -7,8 +7,9 @@ import { useAdminAuth } from '@/contexts/AdminAuthContext'
 interface Stats {
   totalUsers: number
   activeUsers: number
+  inactiveUsers: number
   totalBalance: number
-  todayTransactions: number
+  avgBalance: number
 }
 
 interface RecentActivity {
@@ -29,8 +30,9 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState<Stats>({
     totalUsers: 0,
     activeUsers: 0,
+    inactiveUsers: 0,
     totalBalance: 0,
-    todayTransactions: 0,
+    avgBalance: 0,
   })
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([])
   const [loading, setLoading] = useState(true)
@@ -43,29 +45,48 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        // Fetch user stats
-        const { data: usersData } = await supabase
-          .from('profiles')
-          .select('id, is_active, balance')
-        
-        if (usersData && usersData.length > 0) {
-          const typedUsers = usersData as unknown as UserProfile[]
+        // Try to fetch user stats from the database function
+        const { data: statsData, error: statsError } = await supabase
+          .rpc('get_user_stats')
+          .single()
+
+        if (!statsError && statsData) {
+          const typedStats = statsData as Record<string, unknown>
           setStats({
-            totalUsers: typedUsers.length,
-            activeUsers: typedUsers.filter((u: UserProfile) => u.is_active).length,
-            totalBalance: typedUsers.reduce((sum: number, u: UserProfile) => sum + (parseFloat(String(u.balance)) || 0), 0),
-            todayTransactions: 0,
+            totalUsers: Number(typedStats.total_users) || 0,
+            activeUsers: Number(typedStats.active_users) || 0,
+            inactiveUsers: Number(typedStats.inactive_users) || 0,
+            totalBalance: Number(typedStats.total_balance) || 0,
+            avgBalance: Number(typedStats.avg_balance) || 0,
           })
+        } else {
+          // Fallback: fetch directly from profiles table
+          const { data: usersData } = await supabase
+            .from('profiles')
+            .select('id, is_active, balance')
+          
+          if (usersData && usersData.length > 0) {
+            const typedUsers = usersData as unknown as UserProfile[]
+            setStats({
+              totalUsers: typedUsers.length,
+              activeUsers: typedUsers.filter((u: UserProfile) => u.is_active).length,
+              inactiveUsers: typedUsers.filter((u: UserProfile) => !u.is_active).length,
+              totalBalance: typedUsers.reduce((sum: number, u: UserProfile) => sum + (parseFloat(String(u.balance)) || 0), 0),
+              avgBalance: typedUsers.length > 0 
+                ? typedUsers.reduce((sum: number, u: UserProfile) => sum + (parseFloat(String(u.balance)) || 0), 0) / typedUsers.length 
+                : 0,
+            })
+          }
         }
 
         // Fetch recent admin actions
-        const { data: actionsData } = await supabase
+        const { data: actionsData, error: actionsError } = await supabase
           .from('admin_actions')
           .select('*')
           .order('created_at', { ascending: false })
           .limit(10)
 
-        if (actionsData) {
+        if (!actionsError && actionsData) {
           setRecentActivities(actionsData.map((action: any) => ({
             id: action.id,
             type: action.action_type,
@@ -86,11 +107,18 @@ export default function AdminDashboardPage() {
   const formatActionDescription = (action: any): string => {
     switch (action.action_type) {
       case 'balance_adjustment':
-        return `Adjusted balance for user ${action.target_user_id?.slice(0, 8) || 'unknown'}`
+        const balanceDetails = action.new_value
+        return `Adjusted balance (${balanceDetails?.action || 'unknown'}) €${balanceDetails?.amount || 0}`
       case 'user_status_change':
-        return `Changed user status for ${action.target_user_id?.slice(0, 8) || 'unknown'}`
+        return `Changed user status to ${action.new_value?.is_active ? 'active' : 'inactive'}`
+      case 'settings_update':
+        return 'Updated admin settings'
+      case 'mass_reset_balances':
+        return 'Reset all user balances to zero'
+      case 'mass_deactivate_users':
+        return 'Deactivated all non-admin users'
       default:
-        return `Performed ${action.action_type} operation`
+        return `Performed ${action.action_type.replace(/_/g, ' ')} operation`
     }
   }
 
@@ -115,50 +143,46 @@ export default function AdminDashboardPage() {
         <StatCard
           title="Total Users"
           value={stats.totalUsers.toLocaleString()}
+          subtext={`${stats.activeUsers} active, ${stats.inactiveUsers} inactive`}
+          color="blue"
           icon={
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
           }
-          trend="+12%"
-          trendUp={true}
-          color="blue"
         />
         <StatCard
           title="Active Users"
           value={stats.activeUsers.toLocaleString()}
+          subtext={`${stats.totalUsers > 0 ? Math.round((stats.activeUsers / stats.totalUsers) * 100) : 0}% of total`}
+          color="green"
           icon={
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           }
-          trend="+5%"
-          trendUp={true}
-          color="green"
         />
         <StatCard
           title="Total Balance"
           value={`€${stats.totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          subtext={`Avg: €${stats.avgBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          color="purple"
           icon={
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           }
-          trend="+8%"
-          trendUp={true}
-          color="purple"
         />
         <StatCard
-          title="Today's Transactions"
-          value={stats.todayTransactions.toLocaleString()}
+          title="Avg Balance"
+          value={`€${stats.avgBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          subtext="Per user"
+          color="orange"
           icon={
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           }
-          trend="-3%"
-          trendUp={false}
-          color="orange"
         />
       </div>
 
@@ -208,8 +232,9 @@ export default function AdminDashboardPage() {
 
       {/* Recent Activity */}
       <div className="bg-gray-800 rounded-xl border border-gray-700">
-        <div className="p-6 border-b border-gray-700">
+        <div className="p-6 border-b border-gray-700 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-white">Recent Admin Activity</h2>
+          <a href="/admin/audit" className="text-green-500 hover:text-green-400 text-sm font-medium no-underline">View All</a>
         </div>
         <div className="divide-y divide-gray-700">
           {recentActivities.length > 0 ? (
@@ -239,6 +264,7 @@ export default function AdminDashboardPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               <p>No recent admin activity</p>
+              <p className="text-sm mt-1">Actions you take will appear here</p>
             </div>
           )}
         </div>
@@ -251,15 +277,13 @@ function StatCard({
   title, 
   value, 
   icon, 
-  trend, 
-  trendUp, 
+  subtext,
   color 
 }: { 
   title: string
   value: string
   icon: React.ReactNode
-  trend: string
-  trendUp: boolean
+  subtext?: string
   color: 'blue' | 'green' | 'purple' | 'orange'
 }) {
   const colorClasses = {
@@ -275,13 +299,13 @@ function StatCard({
         <div className={`p-3 rounded-lg ${colorClasses[color]}`}>
           {icon}
         </div>
-        <span className={`text-sm font-medium ${trendUp ? 'text-green-500' : 'text-red-500'}`}>
-          {trend}
-        </span>
       </div>
       <div className="mt-4">
         <p className="text-gray-400 text-sm">{title}</p>
         <p className="text-2xl font-bold text-white mt-1">{value}</p>
+        {subtext && (
+          <p className="text-gray-500 text-xs mt-1">{subtext}</p>
+        )}
       </div>
     </div>
   )

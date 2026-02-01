@@ -56,6 +56,15 @@ const adminNavItems = [
     ),
   },
   {
+    name: 'KYC Requests',
+    href: '/admin/kyc',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c1.657 0 3-1.343 3-3S13.657 5 12 5s-3 1.343-3 3 1.343 3 3 3zM4 19a8 8 0 0116 0" />
+      </svg>
+    ),
+  },
+  {
     name: 'Settings',
     href: '/admin/settings',
     icon: (

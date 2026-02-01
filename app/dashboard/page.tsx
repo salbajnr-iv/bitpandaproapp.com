@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Image from "next/image";
+import Link from "next/link";
 import DashboardHeader from "@/components/DashboardHeader";
 import PortfolioChart from "@/components/PortfolioChart";
 import QuickActionsCard from "@/components/QuickActionsCard";
@@ -53,10 +54,10 @@ const quickActions = [
 
 // Portfolio Actions
 const portfolioActions = [
-  { icon: "buy", label: "Kaufen" },
-  { icon: "sell", label: "Verkaufen" },
-  { icon: "swap", label: "Tauschen" },
-  { icon: "deposit", label: "Einzahlen" },
+  { icon: "buy", label: "Kaufen", href: "/dashboard/buy" },
+  { icon: "sell", label: "Verkaufen", href: "/dashboard/sell" },
+  { icon: "swap", label: "Tauschen", href: "/dashboard/swap" },
+  { icon: "deposit", label: "Einzahlen", href: "/dashboard/deposit" },
 ];
 
 // Allocation data
@@ -193,7 +194,7 @@ export default function DashboardPage() {
         <h3 className="section-title">Portfolio verwalten</h3>
         <section className="portfolio-actions">
           {portfolioActions.map((action, index) => (
-            <div key={index} className="action-btn">
+            <Link key={index} href={action.href || '/dashboard'} className="action-btn">
               <div className={`action-icon ${action.icon}`}>
                 {action.icon === "buy" && (
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -222,7 +223,7 @@ export default function DashboardPage() {
                 )}
               </div>
               <span>{action.label}</span>
-            </div>
+            </Link>
           ))}
         </section>
 

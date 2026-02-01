@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,7 +19,6 @@ function LoadingFallback() {
 }
 
 function OAuthConsentContent() {
-  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [consentData, setConsentData] = useState<{
@@ -28,12 +27,32 @@ function OAuthConsentContent() {
     provider?: string
   } | null>(null)
 
-  // Get OAuth parameters from URL
-  const provider = searchParams.get('provider')
-  const scopes = searchParams.get('scopes')
-  const redirectTo = searchParams.get('redirect_to')
-  const codeChallenge = searchParams.get('code_challenge')
-  const state = searchParams.get('state')
+  // Get OAuth parameters from URL on client
+  const providerRef = useRef<string | null>(null)
+  const scopesRef = useRef<string | null>(null)
+  const redirectToRef = useRef<string | null>(null)
+  const codeChallengeRef = useRef<string | null>(null)
+  const stateRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    providerRef.current = params.get('provider')
+    scopesRef.current = params.get('scopes')
+    redirectToRef.current = params.get('redirect_to')
+    codeChallengeRef.current = params.get('code_challenge')
+    stateRef.current = params.get('state')
+
+    // Parse scopes from URL
+    const scopesList = scopesRef.current?.split(',').map(s => s.trim()) || []
+    
+    // Set consent data (in production, this would come from Supabase)
+    setConsentData({
+      application_name: 'Bitpanda Pro App',
+      scopes: scopesList.length > 0 ? scopesList : ['openid', 'email', 'profile'],
+      provider: providerRef.current || undefined
+    })
+    setLoading(false)
+  }, [])
 
   useEffect(() => {
     // Parse scopes from URL
