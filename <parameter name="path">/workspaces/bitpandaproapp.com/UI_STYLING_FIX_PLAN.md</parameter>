@@ -1,0 +1,533 @@
+<parameter name="content"># UI/UX Styling Fix Plan - Complete E2E Review
+
+## Executive Summary
+This document outlines a comprehensive plan to fix styling inconsistencies, alignment issues, and missing styles across all menu bar pages and dashboard components.
+
+---
+
+## Current State Analysis
+
+### ✅ What's Working Well
+1. **globals.css** has comprehensive design tokens (CSS variables)
+2. Dark mode support implemented
+3. Responsive breakpoints established
+4. Base components (buttons, cards, forms) have styles
+
+### ❌ Key Issues Identified
+
+#### 1. **Inconsistent Inline Styles**
+Multiple pages use inline `style={{ display: "flex", gap: 10 }}` instead of Tailwind or CSS classes:
+- `app/dashboard/page.tsx` - Header actions, layout gaps
+- `app/markets/page.tsx` - Modal, search/sort area
+- `app/profile/page.tsx` - Various layout elements
+
+#### 2. **Missing/Broken Interactive States**
+- Toggle switches lack proper animations
+- Hover states on setting items are inconsistent
+- Button focus states not fully implemented
+- Card hover effects vary across pages
+
+#### 3. **Alignment Issues**
+- Section titles not consistently aligned
+- Header elements misaligned on some pages
+- Modal content padding inconsistent
+- Filter tabs scroll incorrectly on mobile
+
+#### 4. **Missing Empty States**
+- Transactions page: Basic empty state
+- Reports page: Missing empty state
+- Notifications page: Basic empty state
+- Markets page: No empty state for filtered results
+
+#### 5. **Navigation Inconsistencies**
+- Bottom nav icons not consistent
+- Sidebar close button styles vary
+- Header back buttons need standardization
+
+---
+
+## Pages to Review & Fix
+
+### Level 1: Critical (Affects All Users)
+1. `app/dashboard/page.tsx` - Main dashboard
+2. `app/profile/page.tsx` - User profile
+3. `app/settings/page.tsx` - Settings
+4. `app/transactions/page.tsx` - Transactions
+
+### Level 2: High (Frequently Used)
+5. `app/markets/page.tsx` - Markets
+6. `app/notifications/page.tsx` - Notifications
+7. `app/reports/page.tsx` - Reports
+8. `app/statement/page.tsx` - Statement
+
+### Level 3: Medium (Secondary)
+9. `app/contact-us/page.tsx` - Contact
+10. `app/support/page.tsx` - Support
+11. `app/demo/page.tsx` - Demo
+
+---
+
+## Detailed Issues by Page
+
+### 1. Dashboard Page (`app/dashboard/page.tsx`)
+
+| Issue | Current | Expected |
+|-------|---------|----------|
+| Header actions spacing | `style={{ display: "flex", gap: 10 }}` | Tailwind or CSS class |
+| Section spacing | Varies between sections | Consistent 16px/24px gaps |
+| Chart container | Basic styling | Enhanced with gradient |
+| Currency cards | Missing hover effects | Lift + shadow on hover |
+
+**Specific Fixes:**
+- Convert inline flex styles to CSS classes
+- Add consistent section margins
+- Enhance portfolio chart styling
+- Add proper hover states to all cards
+
+### 2. Settings Page (`app/settings/page.tsx`)
+
+| Issue | Current | Expected |
+|-------|---------|----------|
+| Toggle animation | None | Smooth slide animation |
+| Setting item hover | Basic | Lift + subtle border |
+| Danger items | Red text only | Red background + icon |
+| Version info | Minimal styling | Properly styled footer |
+
+**Specific Fixes:**
+- Animate toggle switches
+- Add hover states with CSS transitions
+- Style delete/danger items distinctly
+- Add proper footer spacing
+
+### 3. Transactions Page (`app/transactions/page.tsx`)
+
+| Issue | Current | Expected |
+|-------|---------|----------|
+| Filter tabs | Scroll, no indicator | Fixed tabs with active indicator |
+| Transaction row | Basic padding | Consistent padding + hover |
+| Export button | Minimal | Enhanced with icon + styling |
+| Empty state | Text only | Illustrated empty state |
+
+**Specific Fixes:**
+- Style filter tabs with active state
+- Enhance transaction item rows
+- Make export section prominent
+- Create illustrated empty states
+
+### 4. Markets Page (`app/markets/page.tsx`)
+
+| Issue | Current | Expected |
+|-------|---------|----------|
+| Modal styling | Basic | Full modal with backdrop blur |
+| Coin details | Limited info | Expanded info card |
+| Category chips | Basic | Pill style with gradient |
+| Search bar | No focus state | Focus ring + icon change |
+
+**Specific Fixes:**
+- Enhance coin detail modal
+- Style category selection
+- Add proper focus states
+- Add favorite button animation
+
+### 5. Notifications Page (`app/notifications/page.tsx`)
+
+| Issue | Current | Expected |
+|-------|---------|----------|
+| Filter tabs | Basic button style | Pill tabs with count |
+| Notification read | Dimmed text | Full opacity |
+| Unread badge | Simple text | Styled badge with count |
+| Action buttons | Minimal | Full button styling |
+
+**Specific Fixes:**
+- Style filter tabs
+- Distinguish read/unread clearly
+- Make notification actions consistent
+- Add swipe-to-delete hint
+
+### 6. Reports Page (`/app/reports/page.tsx`)
+
+| Issue | Current | Expected |
+|-------|---------|----------|
+| Report cards | Minimal | Enhanced with icon background |
+| Generate button | Basic | Full button styling |
+| Info card | Basic | Card with icon + styled text |
+| Download icon | Minimal | Animated on hover |
+
+**Specific Fixes:**
+- Enhance report item cards
+- Add illustration for empty state
+- Style generate report section
+- Animate download buttons
+
+### 7. Profile Page (`app/profile/page.tsx`)
+
+| Issue | Current | Expected |
+|-------|---------|----------|
+| Edit form | Basic inputs | Styled form controls |
+| KYC section | Minimal | Enhanced verification UI |
+| Section spacing | Inconsistent | Consistent rhythm |
+| Avatar upload | Placeholder only | Full upload UI |
+
+**Specific Fixes:**
+- Style edit form with proper labels
+- Enhance KYC verification card
+- Add consistent section spacing
+- Add avatar upload styling
+
+---
+
+## Global Style Improvements Needed
+
+### 1. **Design System Enhancements** (`globals.css`)
+
+Add these missing styles:
+```css
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.empty-state-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-state-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.empty-state-description {
+  font-size: 14px;
+  color: var(--muted);
+  max-width: 280px;
+}
+
+/* Filter Tabs */
+.filter-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.filter-tab {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: transparent;
+  border: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-tab:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.filter-tab.active {
+  background: var(--green);
+  border-color: var(--green);
+  color: white;
+}
+
+/* Toggle Switch Enhanced */
+.toggle-switch {
+  width: 52px;
+  height: 28px;
+  background: var(--bg-soft);
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.toggle-switch.active {
+  background: var(--green);
+}
+
+.toggle-switch::after {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  background: white;
+  border-radius: 50%;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.toggle-switch.active::after {
+  transform: translateX(24px);
+}
+
+/* Modal Enhancements */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal-content {
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100vh - 48px);
+  background: var(--card);
+  border-radius: 24px;
+  overflow: hidden;
+  animation: slideUp 0.3s ease;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-body {
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+}
+
+/* Section Enhancements */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.section-action {
+  font-size: 13px;
+  color: var(--green);
+  text-decoration: none;
+}
+
+.section-action:hover {
+  text-decoration: underline;
+}
+
+/* Card Hover Effects */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.card-hover:active {
+  transform: translateY(0);
+}
+
+/* Loading States */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-soft) 25%,
+    var(--border) 50%,
+    var(--bg-soft) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Toast/Notification Toast */
+.toast {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  padding: 12px 24px;
+  background: var(--text);
+  color: var(--bg);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  z-index: 2000;
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+.toast.success {
+  background: var(--green);
+  color: white;
+}
+
+.toast.error {
+  background: #d64545;
+  color: white;
+}
+
+.toast.warning {
+  background: #ff9800;
+  color: white;
+}
+```
+
+### 2. **Component Updates Needed**
+
+#### BottomNav (`components/BottomNav.tsx`)
+- [ ] Add active state styling
+- [ ] Enhance icon sizing
+- [ ] Add proper spacing
+
+#### Sidebar (`components/Sidebar.tsx`)
+- [ ] Animate slide-in
+- [ ] Add backdrop blur
+- [ ] Enhance close button
+
+#### CurrencyCard (`components/CurrencyCard.tsx`)
+- [ ] Add hover effects
+- [ ] Improve price alignment
+- [ ] Add sparkline support
+
+#### QuickActionsCard (`components/QuickActionsCard.tsx`)
+- [ ] Style accent cards differently
+- [ ] Add proper tag styling
+- [ ] Enhance hover states
+
+---
+
+## Implementation Plan
+
+### Phase 1: Global Styles (globals.css)
+- [ ] Add all missing CSS classes
+- [ ] Create empty state components
+- [ ] Add filter tab styles
+- [ ] Enhance toggle switches
+- [ ] Add modal enhancements
+- [ ] Add toast notifications
+- [ ] Add skeleton loading states
+
+### Phase 2: Critical Pages
+- [ ] Fix dashboard inline styles
+- [ ] Fix settings interactive states
+- [ ] Fix transactions filtering
+- [ ] Fix profile form styling
+
+### Phase 3: High Priority Pages
+- [ ] Fix markets modal
+- [ ] Fix notifications tabs
+- [ ] Fix reports cards
+- [ ] Fix statement styling
+
+### Phase 4: Polish & Consistency
+- [ ] Add loading states to all pages
+- [ ] Enhance empty states
+- [ ] Add page transitions
+- [ ] Verify dark mode everywhere
+- [ ] Test responsive behavior
+
+---
+
+## Files to Modify
+
+1. `app/globals.css` - Add missing styles
+2. `components/BottomNav.tsx` - Enhance navigation
+3. `components/Sidebar.tsx` - Add animations
+4. `components/CurrencyCard.tsx` - Add hover effects
+5. `components/QuickActionsCard.tsx` - Style enhancements
+6. `app/dashboard/page.tsx` - Remove inline styles
+7. `app/settings/page.tsx` - Enhance toggles
+8. `app/transactions/page.tsx` - Style filters
+9. `app/markets/page.tsx` - Enhance modal
+10. `app/notifications/page.tsx` - Style tabs
+11. `app/reports/page.tsx` - Add empty state
+12. `app/profile/page.tsx` - Form styling
+
+---
+
+## Testing Checklist
+
+- [ ] Dark mode on all pages
+- [ ] Responsive on mobile (375px+)
+- [ ] Tablet (768px+)
+- [ ] Desktop (1024px+)
+- [ ] All interactive states work
+- [ ] No console errors
+- [ ] Consistent spacing
+- [ ] Typography hierarchy
+- [ ] Color consistency
+
+---
+
+## Timeline Estimate
+
+| Phase | Time | Pages |
+|-------|------|-------|
+| Phase 1 | 2-3 hours | globals.css |
+| Phase 2 | 3-4 hours | Dashboard, Settings, Transactions, Profile |
+| Phase 3 | 2-3 hours | Markets, Notifications, Reports, Statement |
+| Phase 4 | 2-3 hours | Polish, testing, fixes |
+
+**Total: 9-13 hours**
+
+---
+
+## Next Steps
+
+1. ✅ Create this planning document
+2. ⏳ Review with stakeholder
+3. ⏳ Start with Phase 1: Global Styles
+4. ⏳ Proceed page by page
+5. ⏳ Final testing and polish
+
+---
+
+*Document created for comprehensive UI/UX styling review*
+</parameter>

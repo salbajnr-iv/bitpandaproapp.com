@@ -3,6 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import DashboardHeader from "@/components/DashboardHeader";
 import PortfolioChart from "@/components/PortfolioChart";
 import QuickActionsCard from "@/components/QuickActionsCard";
@@ -120,6 +121,7 @@ const notifications = [
 
 export default function DashboardPage() {
   const { user, loading } = useAuth();
+  const router = useRouter();
   const [isClient, setIsClient] = React.useState(false);
   const [activeRange, setActiveRange] = React.useState("1D");
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
@@ -151,13 +153,18 @@ export default function DashboardPage() {
     <div className="dashboard-container">
       <div className="dashboard-app">
         {/* HEADER */}
-        <DashboardHeader userName={userName} />
+        <DashboardHeader 
+          userName={userName}
+          portfolioValue={portfolioData.totalValue + portfolioData.currency}
+          portfolioChange={portfolioData.change}
+          notificationCount={notificationCount}
+        />
 
         {/* HEADER ACTIONS */}
         <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
           <NotificationBadge 
             count={notificationCount} 
-            onClick={() => {}} 
+            onClick={() => router.push("/notifications")} 
           />
         </div>
 

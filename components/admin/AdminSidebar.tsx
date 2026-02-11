@@ -97,7 +97,7 @@ export default function AdminSidebar({ isOpen, onToggle }: AdminSidebarProps) {
       
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-50 h-screen bg-gray-800 border-r border-gray-700 transition-all duration-300 ${
+        className={`fixed top-0 left-0 z-50 h-screen bg-gray-800 dark:bg-gray-900 border-r border-gray-700 dark:border-gray-700 transition-all duration-300 ${
           isOpen ? 'w-64' : 'w-20'
         }`}
       >
@@ -134,7 +134,7 @@ export default function AdminSidebar({ isOpen, onToggle }: AdminSidebarProps) {
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
                   isActive
                     ? 'bg-green-800 text-white'
-                    : 'text-gray-400 hover:bg-gray-700 hover:text-white'
+                    : 'text-gray-400 dark:text-gray-300 hover:bg-gray-700 dark:hover:bg-gray-800 hover:text-white dark:hover:text-white'
                 }`}
               >
                 <span className={isActive ? 'text-white' : 'text-gray-400'}>{item.icon}</span>
@@ -163,7 +163,7 @@ export default function AdminSidebar({ isOpen, onToggle }: AdminSidebarProps) {
               </div>
               <button
                 onClick={handleSignOut}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-700 dark:bg-gray-800 hover:bg-gray-600 dark:hover:bg-gray-700 text-white rounded-lg transition-colors text-sm"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -174,7 +174,7 @@ export default function AdminSidebar({ isOpen, onToggle }: AdminSidebarProps) {
           ) : (
             <button
               onClick={handleSignOut}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-700 dark:bg-gray-800 hover:bg-gray-600 dark:hover:bg-gray-700 text-white rounded-lg transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />

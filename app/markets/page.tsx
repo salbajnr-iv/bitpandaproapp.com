@@ -246,7 +246,7 @@ export default function MarketsPage() {
                     style={{ background: getCoinColor(market.symbol) }}
                   >
                     {market.iconSrc ? (
-                      <Image src={market.iconSrc} alt={market.name} width={20} height={20} style={{ borderRadius: '50%' }} />
+                      <Image src={market.iconSrc} alt={market.name} width={20} height={20} unoptimized style={{ borderRadius: '50%' }} />
                     ) : (
                       <span style={{ color: "#fff", fontWeight: 700, fontSize: 12 }}>
                         {market.symbol.slice(0, 2)}
@@ -357,7 +357,7 @@ export default function MarketsPage() {
                   style={{ background: getCoinColor(selectedCoin.symbol), width: 44, height: 44 }}
                 >
                   {selectedCoin.iconSrc ? (
-                    <Image src={selectedCoin.iconSrc} alt={selectedCoin.name} width={32} height={32} style={{ borderRadius: '50%' }} />
+                    <Image src={selectedCoin.iconSrc} alt={selectedCoin.name} width={32} height={32} unoptimized style={{ borderRadius: '50%' }} />
                   ) : (
                     <span style={{ color: "#fff", fontWeight: 700 }}>
                       {selectedCoin.symbol.slice(0, 2)}

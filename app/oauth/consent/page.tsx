@@ -54,19 +54,6 @@ function OAuthConsentContent() {
     setLoading(false)
   }, [])
 
-  useEffect(() => {
-    // Parse scopes from URL
-    const scopesList = scopes?.split(',').map(s => s.trim()) || []
-    
-    // Set consent data (in production, this would come from Supabase)
-    setConsentData({
-      application_name: 'Bitpanda Pro App',
-      scopes: scopesList.length > 0 ? scopesList : ['openid', 'email', 'profile'],
-      provider: provider || undefined
-    })
-    setLoading(false)
-  }, [scopes, provider])
-
   const handleConsent = async () => {
     try {
       setLoading(true)

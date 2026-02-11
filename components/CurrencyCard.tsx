@@ -34,7 +34,7 @@ export default function CurrencyCard({
       <div className="currency-left">
         <div className="currency-icon" style={{ background: bgColor }}>
           {iconSrc ? (
-            <Image src={iconSrc} alt={name} width={24} height={24} />
+            <Image src={iconSrc} alt={name} width={24} height={24} unoptimized />
           ) : (
             <span className="currency-symbol">{symbol.slice(0, 2)}</span>
           )}
