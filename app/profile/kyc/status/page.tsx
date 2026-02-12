@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import DashboardHeader from '@/components/DashboardHeader';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -10,101 +10,127 @@ interface KycRequest {
   id: string;
   status: string;
   submitted_at: string;
-  reviewed_at?: string;
-  review_reason?: string;
+  reviewed_at?: string | null;
+  review_reason?: string | null;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string; bgColor: string }> = {
+interface StatusConfig {
+  label: string;
+  icon: string;
+  bgColor: string;
+  color: string;
+}
+
+const STATUS_CONFIG: Record<string, StatusConfig> = {
   none: {
     label: 'Not Started',
-    color: 'text-gray-400',
-    icon: '⭕',
-    bgColor: 'bg-gray-950/50',
+    icon: '📋',
+    bgColor: 'bg-gray-800',
+    color: 'text-gray-300',
   },
   pending_review: {
     label: 'Pending Review',
-    color: 'text-yellow-400',
     icon: '⏳',
-    bgColor: 'bg-yellow-950/30',
+    bgColor: 'bg-yellow-800',
+    color: 'text-yellow-200',
   },
   approved: {
     label: 'Approved',
-    color: 'text-green-400',
     icon: '✅',
-    bgColor: 'bg-green-950/30',
+    bgColor: 'bg-green-800',
+    color: 'text-green-200',
   },
   rejected: {
     label: 'Rejected',
-    color: 'text-red-400',
     icon: '❌',
-    bgColor: 'bg-red-950/30',
+    bgColor: 'bg-red-800',
+    color: 'text-red-200',
   },
   resubmit_required: {
     label: 'Resubmit Required',
-    color: 'text-orange-400',
-    icon: '⚠️',
-    bgColor: 'bg-orange-950/30',
+    icon: '🔄',
+    bgColor: 'bg-orange-800',
+    color: 'text-orange-200',
   },
 };
 
-export default function KycStatusPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState('none');
-  const [requests, setRequests] = useState<KycRequest[]>([]);
-  const [userId, setUserId] = useState<string>();
-  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-8 h-8 border-4 border-green-800 border-t-transparent rounded-full animate-spin mx-auto"></div>
+        <p className="mt-4 text-gray-400">Loading...</p>
+      </div>
+    </div>
+  );
+}
 
+function KycStatusContent() {
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<string>('none');
+  const [requests, setRequests] = useState<KycRequest[]>([]);
+  const [error, setError] = useState<string>('');
+  const searchParams = useSearchParams();
   const supabase = createClient();
+  const showSuccessMessage = searchParams.get('success') === 'true';
 
   useEffect(() => {
-    const loadData = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) {
-        router.push('/auth/signin');
-        return;
-      }
-      setUserId(session.user.id);
-
+    const fetchKycStatus = async () => {
       try {
-        // Fetch profile status
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('kyc_status')
-          .eq('id', session.user.id)
-          .single();
-
-        if (profile) {
-          setStatus(profile.kyc_status || 'none');
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          setStatus('none');
+          setLoading(false);
+          return;
         }
 
-        // Fetch KYC requests
-        const { data: kycRequests } = await supabase
+        // Get current user's KYC requests
+        const { data: kycRequests, error: fetchError } = await supabase
           .from('kyc_requests')
-          .select('*')
-          .eq('user_id', session.user.id)
-          .order('submitted_at', { ascending: false });
+          .select('id, status, submitted_at, reviewed_at, review_reason')
+          .eq('user_id', user.id)
+          .order('submitted_at', { ascending: false })
+          .limit(10);
 
-        if (kycRequests) {
-          setRequests(kycRequests);
+        if (fetchError) {
+          console.error('Error fetching KYC status:', fetchError);
+          setError('Failed to load KYC status');
+          setLoading(false);
+          return;
         }
 
-        // Check for success message
-        if (searchParams.get('submitted') === 'true') {
-          setShowSuccessMessage(true);
-          setTimeout(() => setShowSuccessMessage(false), 5000);
+        setRequests(kycRequests || []);
+        
+        if (kycRequests && kycRequests.length > 0) {
+          setStatus(kycRequests[0].status);
+        } else {
+          setStatus('none');
         }
+      } catch (err) {
+        console.error('Error:', err);
+        setError('An unexpected error occurred');
       } finally {
         setLoading(false);
       }
     };
 
-    loadData();
-  }, [supabase, router, searchParams]);
+    fetchKycStatus();
+  }, [supabase]);
 
   const statusConfig = STATUS_CONFIG[status] || STATUS_CONFIG.none;
   const canStartKyc = status === 'none' || status === 'rejected' || status === 'resubmit_required';
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-green-800 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-container">
@@ -119,9 +145,16 @@ export default function KycStatusPage() {
               <div>
                 <h3 className="text-white font-semibold">KYC Submitted Successfully</h3>
                 <p className="text-sm text-green-200 mt-1">
-                  Your documents have been submitted. We'll review them within 2-5 business days.
+                  Your documents have been submitted. We&apos;ll review them within 2-5 business days.
                 </p>
               </div>
+            </div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-950/50 border border-red-600 rounded-lg">
+              <p className="text-red-400">{error}</p>
             </div>
           )}
 
@@ -201,74 +234,28 @@ export default function KycStatusPage() {
                     <div key={idx} className="p-4 bg-gray-800/50 rounded-lg border border-gray-700">
                       <div className="flex items-start justify-between">
                         <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-2xl">{requestStatus.icon}</span>
-                            <div>
-                              <p className={`font-semibold ${requestStatus.color}`}>
-                                {requestStatus.label}
-                              </p>
-                              <p className="text-xs text-gray-400 mt-1">
-                                Submitted:{' '}
-                                {new Date(request.submitted_at).toLocaleDateString()} at{' '}
-                                {new Date(request.submitted_at).toLocaleTimeString()}
-                              </p>
-                            </div>
-                          </div>
+                          <h4 className="text-white font-medium">{requestStatus.label}</h4>
+                          <p className="text-sm text-gray-400">Submitted: {new Date(request.submitted_at).toLocaleDateString()}</p>
+                          {request.reviewed_at && <p className="text-sm text-gray-400">Reviewed: {new Date(request.reviewed_at).toLocaleDateString()}</p>}
+                          {request.review_reason && <p className="text-sm text-red-400">Reason: {request.review_reason}</p>}
                         </div>
-                        {request.reviewed_at && (
-                          <span className="text-xs text-gray-500">
-                            Reviewed:{' '}
-                            {new Date(request.reviewed_at).toLocaleDateString()}
-                          </span>
-                        )}
                       </div>
-
-                      {request.review_reason && (
-                        <div className="mt-3 p-3 bg-red-950/30 border border-red-600/50 rounded text-sm text-red-200">
-                          <strong>Reason:</strong> {request.review_reason}
-                        </div>
-                      )}
                     </div>
                   );
                 })}
               </div>
             </div>
           )}
-
-          {/* FAQ Section */}
-          <div className="mt-8 border border-gray-600 rounded-lg p-6 space-y-4">
-            <h3 className="text-lg font-semibold text-white">Frequently Asked Questions</h3>
-
-            <div className="space-y-4">
-              {[
-                {
-                  q: 'How long does the verification process take?',
-                  a: 'Typically 2-5 business days. Weekend and holiday submissions may take longer.',
-                },
-                {
-                  q: 'What documents do I need?',
-                  a: 'You need a valid ID (passport, national ID, or driver\'s license), proof of address, and a selfie with your ID.',
-                },
-                {
-                  q: 'Why was my KYC rejected?',
-                  a: 'Common reasons include unclear documents, mismatched information, or expired ID. We\'ll provide feedback on what to correct.',
-                },
-                {
-                  q: 'Can I use the platform before KYC is approved?',
-                  a: 'Limited features are available. Full trading access requires KYC approval.',
-                },
-              ].map((faq, idx) => (
-                <details key={idx} className="group">
-                  <summary className="cursor-pointer text-white font-medium py-2 px-3 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition-colors">
-                    {faq.q}
-                  </summary>
-                  <p className="text-gray-400 text-sm mt-2 pl-3 py-2">{faq.a}</p>
-                </details>
-              ))}
-            </div>
-          </div>
         </main>
       </div>
     </div>
+  );
+}
+
+export default function KycStatusPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <KycStatusContent />
+    </Suspense>
   );
 }

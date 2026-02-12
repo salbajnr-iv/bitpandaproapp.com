@@ -1,11 +1,12 @@
 'use client'
 
 import { Suspense, useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { createBrowserClient } from '@supabase/ssr'
+
+type OAuthProvider = 'google' | 'github' | 'facebook' | 'twitter' | 'apple' | 'discord'
 
 function LoadingFallback() {
   return (
@@ -25,7 +26,11 @@ function OAuthConsentContent() {
     application_name: string
     scopes: string[]
     provider?: string
-  } | null>(null)
+  }>({
+    application_name: 'Bitpanda Pro App',
+    scopes: ['openid', 'email', 'profile'],
+    provider: undefined
+  })
 
   // Get OAuth parameters from URL on client
   const providerRef = useRef<string | null>(null)
@@ -45,13 +50,17 @@ function OAuthConsentContent() {
     // Parse scopes from URL
     const scopesList = scopesRef.current?.split(',').map(s => s.trim()) || []
     
-    // Set consent data (in production, this would come from Supabase)
-    setConsentData({
-      application_name: 'Bitpanda Pro App',
-      scopes: scopesList.length > 0 ? scopesList : ['openid', 'email', 'profile'],
-      provider: providerRef.current || undefined
-    })
-    setLoading(false)
+    // Defer state updates to avoid synchronous setState in effect
+    const timer = setTimeout(() => {
+      setConsentData({
+        application_name: 'Bitpanda Pro App',
+        scopes: scopesList.length > 0 ? scopesList : ['openid', 'email', 'profile'],
+        provider: providerRef.current || undefined
+      })
+      setLoading(false)
+    }, 0)
+
+    return () => clearTimeout(timer)
   }, [])
 
   const handleConsent = async () => {
@@ -62,13 +71,15 @@ function OAuthConsentContent() {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
 
-      // If we have a provider, initiate OAuth flow
-      if (provider) {
+      const currentProvider = providerRef.current
+      const currentScopes = scopesRef.current
+      
+      if (currentProvider) {
         const { data, error } = await supabase.auth.signInWithOAuth({
-          provider: provider as any,
+          provider: currentProvider as OAuthProvider,
           options: {
             redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
-            scopes: scopes || 'openid email profile',
+            scopes: currentScopes || 'openid email profile',
           }
         })
 
@@ -76,14 +87,12 @@ function OAuthConsentContent() {
           setError(error.message)
           setLoading(false)
         } else if (data.url) {
-          // Redirect to the OAuth provider
           window.location.href = data.url
         }
       } else {
-        // For generic OAuth flow, redirect to the callback
         window.location.href = `/auth/signin?oauth_success=true`
       }
-    } catch (err) {
+    } catch {
       setError('Failed to complete authorization')
       setLoading(false)
     }
@@ -114,7 +123,7 @@ function OAuthConsentContent() {
             Authorize Access
           </CardTitle>
           <CardDescription className="text-gray-600">
-            {consentData?.application_name || 'Bitpanda Pro App'} wants to access your account
+            {consentData.application_name} wants to access your account
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -127,10 +136,10 @@ function OAuthConsentContent() {
           <div className="space-y-4">
             <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
               <h3 className="font-medium text-gray-900 mb-3">
-                This will allow {consentData?.application_name || 'the application'} to:
+                This will allow {consentData.application_name} to:
               </h3>
               <ul className="space-y-2">
-                {consentData?.scopes.map((scope, index) => (
+                {consentData.scopes.map((scope, index) => (
                   <li key={index} className="flex items-center text-sm text-gray-600">
                     <svg className="w-5 h-5 text-green-800 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -141,7 +150,7 @@ function OAuthConsentContent() {
               </ul>
             </div>
 
-            {consentData?.provider && (
+            {consentData.provider && (
               <div className="text-center text-sm text-gray-600">
                 <p>Signing in with <strong>{consentData.provider}</strong></p>
               </div>
