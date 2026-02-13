@@ -1,14 +1,30 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { createBrowserClient } from '@supabase/ssr'
 import { useAdminAuth } from '@/contexts/AdminAuthContext'
 
-export default function AdminSettingsPage() {
-  const { user } = useAdminAuth()
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+interface AdminSettings {
+  requireEmailConfirmation: boolean
+  allowUserRegistration: boolean
+  maxWithdrawalLimit: number
+  notifyOnLargeTransactions: boolean
+  largeTransactionThreshold: number
+  sessionTimeout: number
+}
 
-  const [settings, setSettings] = useState({
+interface ToastMessage {
+  type: 'success' | 'error'
+  message: string
+}
+
+export default function AdminSettingsPage() {
+  const { user, loading: authLoading } = useAdminAuth()
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
+
+  const [settings, setSettings] = useState<AdminSettings>({
     requireEmailConfirmation: true,
     allowUserRegistration: true,
     maxWithdrawalLimit: 10000,
@@ -17,13 +33,113 @@ export default function AdminSettingsPage() {
     sessionTimeout: 60,
   })
 
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_admin_settings')
+      
+      if (error) {
+        console.error('Error fetching settings:', error)
+        // Use default settings if function doesn't exist yet
+        return
+      }
+
+      if (data) {
+        setSettings(prev => ({
+          ...prev,
+          ...(data as AdminSettings)
+        }))
+      }
+    } catch (error) {
+      console.error('Error fetching settings:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [supabase])
+
+  useEffect(() => {
+    fetchSettings()
+  }, [fetchSettings])
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message })
+    setTimeout(() => setToast(null), 5000)
+  }
+
   const handleSave = async () => {
     setSaving(true)
-    // Simulate save
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+    try {
+      const { error } = await supabase.rpc('update_admin_settings', {
+        p_settings: settings as unknown as Record<string, unknown>
+      })
+
+      if (error) {
+        console.error('Error saving settings:', error)
+        showToast('error', `Failed to save settings: ${error.message}`)
+        return
+      }
+
+      showToast('success', 'Settings saved successfully')
+    } catch (error) {
+      console.error('Error saving settings:', error)
+      showToast('error', 'An unexpected error occurred')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleResetBalances = async () => {
+    if (!confirm('Are you sure you want to reset ALL user balances to zero? This cannot be undone!')) {
+      return
+    }
+
+    try {
+      const { error } = await supabase.rpc('reset_all_balances')
+      
+      if (error) {
+        console.error('Error resetting balances:', error)
+        showToast('error', `Failed to reset balances: ${error.message}`)
+        return
+      }
+
+      showToast('success', 'All user balances have been reset to zero')
+    } catch (error) {
+      console.error('Error resetting balances:', error)
+      showToast('error', 'An unexpected error occurred')
+    }
+  }
+
+  const handleDeactivateUsers = async () => {
+    if (!confirm('Are you sure you want to deactivate ALL non-admin users? This cannot be undone!')) {
+      return
+    }
+
+    try {
+      const { error } = await supabase.rpc('deactivate_all_users')
+      
+      if (error) {
+        console.error('Error deactivating users:', error)
+        showToast('error', `Failed to deactivate users: ${error.message}`)
+        return
+      }
+
+      showToast('success', 'All non-admin users have been deactivated')
+    } catch (error) {
+      console.error('Error deactivating users:', error)
+      showToast('error', 'An unexpected error occurred')
+    }
+  }
+
+  if (authLoading || loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-12 h-12 border-4 border-green-800 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    )
   }
 
   return (
@@ -37,19 +153,45 @@ export default function AdminSettingsPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-4 py-2 bg-green-800 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
+          className="px-4 py-2 bg-green-800 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
         >
+          {saving && (
+            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          )}
           {saving ? 'Saving...' : 'Save Changes'}
         </button>
       </div>
 
       {/* Success Message */}
-      {saved && (
+      {toast && toast.type === 'success' && (
         <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center gap-3">
           <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
-          <span className="text-green-500">Settings saved successfully</span>
+          <span className="text-green-500">{toast.message}</span>
+          <button onClick={() => setToast(null)} className="ml-auto text-green-500 hover:opacity-70">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Error Message */}
+      {toast && toast.type === 'error' && (
+        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-3">
+          <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          <span className="text-red-500">{toast.message}</span>
+          <button onClick={() => setToast(null)} className="ml-auto text-red-500 hover:opacity-70">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       )}
 
@@ -194,21 +336,55 @@ export default function AdminSettingsPage() {
               <p className="text-white font-medium">Reset All User Balances</p>
               <p className="text-gray-400 text-sm">Set all user balances to zero</p>
             </div>
-            <button className="px-4 py-2 bg-red-900 hover:bg-red-800 text-red-200 rounded-lg transition-colors">
+            <button
+              onClick={handleResetBalances}
+              className="px-4 py-2 bg-red-900 hover:bg-red-800 text-red-200 rounded-lg transition-colors"
+            >
               Reset All
             </button>
           </div>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-white font-medium">Deactivate All Users</p>
-              <p className="text-gray-400 text-sm">Temporarily disable all user accounts</p>
+              <p className="text-gray-400 text-sm">Temporarily disable all non-admin user accounts</p>
             </div>
-            <button className="px-4 py-2 bg-red-900 hover:bg-red-800 text-red-200 rounded-lg transition-colors">
+            <button
+              onClick={handleDeactivateUsers}
+              className="px-4 py-2 bg-red-900 hover:bg-red-800 text-red-200 rounded-lg transition-colors"
+            >
               Deactivate All
             </button>
           </div>
         </div>
       </div>
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50 ${
+          toast.type === 'success' 
+            ? 'bg-green-900/90 text-green-100 border border-green-700' 
+            : 'bg-red-900/90 text-red-100 border border-red-700'
+        }`}>
+          {toast.type === 'success' ? (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
+          <span>{toast.message}</span>
+          <button 
+            onClick={() => setToast(null)}
+            className="ml-2 hover:opacity-70 transition-opacity"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   )
 }

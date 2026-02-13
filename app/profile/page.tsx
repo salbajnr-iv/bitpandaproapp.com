@@ -150,21 +150,60 @@ export default function ProfilePage() {
         updated_at: new Date().toISOString(),
       };
 
+      console.log('Attempting to save profile with payload:', payload);
+      
       const { error: upsertError } = await supabase.from('profiles').upsert(payload);
-      if (upsertError) throw upsertError;
+      
+      if (upsertError) {
+        console.error('Profile upsert error details:', {
+          message: upsertError.message,
+          code: upsertError.code,
+          details: upsertError.details,
+          hint: upsertError.hint
+        });
+        throw new Error(`Profile save failed: ${upsertError.message} (Code: ${upsertError.code})`);
+      }
 
-      const { error: authErr } = await supabase.auth.updateUser({ data: { full_name: form.name } });
-      if (authErr) console.warn('Could not update auth user metadata', authErr);
+      console.log('Profile saved successfully to database');
 
-      setProfile((prev: any) => ({ ...(prev || {}), name: form.name, phone: form.phone, accountType: form.accountType }));
+      // Update auth user metadata
+      const { error: authErr } = await supabase.auth.updateUser({ 
+        data: { 
+          full_name: form.name,
+          phone: form.phone,
+          accountType: form.accountType
+        } 
+      });
+      
+      if (authErr) {
+        console.warn('Could not update auth user metadata:', authErr);
+      } else {
+        console.log('Auth user metadata updated successfully');
+      }
+
+      setProfile((prev: any) => ({ 
+        ...(prev || {}), 
+        name: form.name, 
+        phone: form.phone, 
+        accountType: form.accountType 
+      }));
+      
       setEditing(false);
-      setStatusMessage('Profile saved');
-    } catch (err) {
+      setStatusMessage('Profile saved successfully');
+    } catch (err: any) {
       console.error('Save failed', err);
-      setStatusMessage('Could not save profile.');
+      
+      // Provide more specific error message based on error type
+      if (err.message?.includes('RLS') || err.message?.includes('policy')) {
+        setStatusMessage('Permission denied. Please check your account settings.');
+      } else if (err.message?.includes('network') || err.message?.includes('fetch')) {
+        setStatusMessage('Network error. Please check your connection and try again.');
+      } else {
+        setStatusMessage('Could not save profile. Please try again.');
+      }
     } finally {
       setSaving(false);
-      setTimeout(() => setStatusMessage(null), 3000);
+      setTimeout(() => setStatusMessage(null), 5000);
     }
   };
 
@@ -252,12 +291,12 @@ export default function ProfilePage() {
                   <span className="kyc-status">Verification Required</span>
                   <p>Complete your identity verification to unlock all features.</p>
                 </div>
-                <button className="kyc-button">
+                <Link href="/profile/kyc" className="kyc-button" style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
                   Verify KYC
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 18 15 12 9 6" />
                   </svg>
-                </button>
+                </Link>
               </div>
             )}
           </div>

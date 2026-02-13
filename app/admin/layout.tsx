@@ -32,7 +32,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   // If on auth page, show the page directly without blocking with loading spinner
   if (isAuthPage) {
     return (
-      <div className="min-h-screen bg-gray-900">
+      <div className="min-h-screen bg-white dark:bg-gray-900">
         {children}
       </div>
     )
@@ -41,7 +41,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   // Show loading state only for protected admin pages (not auth pages)
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-white dark:bg-gray-900 flex items-center justify-center">
         <div className="w-16 h-16 border-4 border-green-800 border-t-transparent rounded-full animate-spin"></div>
       </div>
     )
@@ -50,7 +50,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   // For non-auth pages, require authentication and admin status
   if (!user || !isAdmin) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-white dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 text-red-500">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -64,7 +64,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-white dark:bg-gray-900">
       <AdminSidebar isOpen={isSidebarOpen} onToggle={() => setIsSidebarOpen(!isSidebarOpen)} />
       <div className={`transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
         <AdminHeader onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />

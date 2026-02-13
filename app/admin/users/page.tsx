@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import { useAdminAuth } from '@/contexts/AdminAuthContext'
+import KycReviewModal from '@/app/admin/components/KycReviewModal'
 
 interface UserProfile {
   id: string
@@ -20,8 +21,13 @@ interface PaginationState {
   total: number
 }
 
+interface ToastMessage {
+  type: 'success' | 'error'
+  message: string
+}
+
 export default function AdminUsersPage() {
-  const { loading: authLoading } = useAdminAuth()
+  const { loading: authLoading, session } = useAdminAuth()
   const [users, setUsers] = useState<UserProfile[]>([])
   const [pagination, setPagination] = useState<PaginationState>({
     page: 1,
@@ -30,6 +36,7 @@ export default function AdminUsersPage() {
   })
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [showBalanceModal, setShowBalanceModal] = useState(false)
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null)
   const [balanceAction, setBalanceAction] = useState<'add' | 'subtract'>('add')
@@ -37,19 +44,42 @@ export default function AdminUsersPage() {
   const [balanceReason, setBalanceReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [toast, setToast] = useState<ToastMessage | null>(null)
+
+  // Simulation modal
+  const [showSimModal, setShowSimModal] = useState(false)
+  const [simLoading, setSimLoading] = useState(false)
+  const [simDepositAmount, setSimDepositAmount] = useState('')
+  const [simTradeAsset, setSimTradeAsset] = useState('BTC')
+  const [simTradeSide, setSimTradeSide] = useState<'buy' | 'sell'>('buy')
+  const [simTradeAmount, setSimTradeAmount] = useState('')
+  const [simNotificationTitle, setSimNotificationTitle] = useState('')
+  const [simNotificationBody, setSimNotificationBody] = useState('')
+  const [simResults, setSimResults] = useState<any[] | null>(null)
+
+  // KYC modal
+  const [showKycModal, setShowKycModal] = useState(false)
+  const [kycRequestId, setKycRequestId] = useState<string | null>(null)
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  // Debounce search term to avoid too many queries
   useEffect(() => {
-    fetchUsers()
-  }, [pagination.page, statusFilter])
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm)
+      setPagination(prev => ({ ...prev, page: 1 }))
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
 
-  const fetchUsers = async () => {
+  // Fetch users with search and filters
+  const fetchUsers = useCallback(async () => {
     setLoading(true)
     try {
+      // Try using the search_users function first, fall back to direct query
       const from = (pagination.page - 1) * pagination.limit
       const to = from + pagination.limit - 1
 
@@ -59,26 +89,56 @@ export default function AdminUsersPage() {
         .range(from, to)
         .order('created_at', { ascending: false })
 
+      // Apply status filter
       if (statusFilter === 'active') {
         query = query.eq('is_active', true)
       } else if (statusFilter === 'inactive') {
         query = query.eq('is_active', false)
       }
 
-      const { data, error, count } = await query
+      // Apply search filter on client side for better performance
+          const { data, error, count } = await query
 
       if (error) {
         console.error('Error fetching users:', error)
+        setToast({ type: 'error', message: 'Failed to fetch users' })
         return
       }
 
-      setUsers(data as unknown as UserProfile[])
+      // Enrich data with latest kyc request id (if available)
+      const mapped = (data as any[] || []).map(u => ({
+        ...u,
+        latest_kyc_request_id: u.latest_kyc_request_id || null
+      }))
+
+      // Apply search filter on client side
+      let filteredData = mapped as unknown as UserProfile[]
+      if (debouncedSearch) {
+        const search = debouncedSearch.toLowerCase()
+        filteredData = filteredData.filter(
+          user =>
+            user.email?.toLowerCase().includes(search) ||
+            user.full_name?.toLowerCase().includes(search)
+        )
+      }
+
+      setUsers(filteredData)
       setPagination(prev => ({ ...prev, total: count || 0 }))
     } catch (error) {
       console.error('Error fetching users:', error)
+      setToast({ type: 'error', message: 'An unexpected error occurred' })
     } finally {
       setLoading(false)
     }
+  }, [supabase, pagination.page, statusFilter, debouncedSearch])
+
+  useEffect(() => {
+    fetchUsers()
+  }, [fetchUsers])
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message })
+    setTimeout(() => setToast(null), 5000)
   }
 
   const handleAdjustBalance = async () => {
@@ -89,11 +149,12 @@ export default function AdminUsersPage() {
       const amount = parseFloat(balanceAmount)
       
       if (isNaN(amount) || amount <= 0) {
-        alert('Please enter a valid positive amount')
+        showToast('error', 'Please enter a valid positive amount')
         return
       }
 
       // Call the database function to adjust balance
+      // Using positional parameters as defined in the SQL function
       const { error } = await supabase.rpc('adjust_balance', {
         p_user_id: selectedUser.id,
         p_action_type: balanceAction,
@@ -103,18 +164,18 @@ export default function AdminUsersPage() {
 
       if (error) {
         console.error('Error adjusting balance:', error)
-        alert('Failed to adjust balance: ' + error.message)
+        showToast('error', `Failed to adjust balance: ${error.message}`)
         return
       }
 
-      alert(`Successfully ${balanceAction === 'add' ? 'added' : 'subtracted'} €${amount} ${balanceAction === 'add' ? 'to' : 'from'} user ${selectedUser.email}`)
+      showToast('success', `Successfully ${balanceAction === 'add' ? 'added' : 'subtracted'} €${amount.toLocaleString()} ${balanceAction === 'add' ? 'to' : 'from'} user ${selectedUser.email}`)
       setShowBalanceModal(false)
       setBalanceAmount('')
       setBalanceReason('')
       fetchUsers()
     } catch (error) {
       console.error('Error adjusting balance:', error)
-      alert('An unexpected error occurred')
+      showToast('error', 'An unexpected error occurred')
     } finally {
       setActionLoading(false)
     }
@@ -133,14 +194,15 @@ export default function AdminUsersPage() {
 
       if (error) {
         console.error('Error toggling user status:', error)
-        alert('Failed to update user status')
+        showToast('error', `Failed to update user status: ${error.message}`)
         return
       }
 
+      showToast('success', `User ${user.email} has been ${!user.is_active ? 'activated' : 'deactivated'}`)
       fetchUsers()
     } catch (error) {
       console.error('Error toggling user status:', error)
-      alert('An unexpected error occurred')
+      showToast('error', 'An unexpected error occurred')
     }
   }
 
@@ -148,6 +210,12 @@ export default function AdminUsersPage() {
     user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
   )
+
+  // Map additional fields
+  const extendedUsers = filteredUsers.map(u => ({
+    ...u,
+    latest_kyc_request_id: (u as any).latest_kyc_request_id || null
+  }))
 
   const totalPages = Math.ceil(pagination.total / pagination.limit)
 
@@ -212,6 +280,7 @@ export default function AdminUsersPage() {
               <tr className="bg-gray-700/50">
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">User</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">Balance</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">KYC</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">Joined</th>
                 <th className="px-6 py-4 text-right text-xs font-semibold text-gray-300 uppercase tracking-wider">Actions</th>
@@ -233,7 +302,7 @@ export default function AdminUsersPage() {
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((user) => (
+                extendedUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-700/30 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -265,6 +334,14 @@ export default function AdminUsersPage() {
                         {user.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
+
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        (user as any).kyc_status === 'verified' ? 'bg-green-500/10 text-green-500' : (user as any).kyc_status === 'rejected' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'
+                      }`}>
+                        {(user as any).kyc_status || 'none'}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 text-gray-400 text-sm">
                       {new Date(user.created_at).toLocaleDateString()}
                     </td>
@@ -279,6 +356,29 @@ export default function AdminUsersPage() {
                         >
                           Adjust Balance
                         </button>
+
+                        <button
+                          onClick={() => {
+                            setSelectedUser(user)
+                            setShowSimModal(true)
+                          }}
+                          className="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+                        >
+                          Simulate
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            // open KYC review modal for latest request
+                            setSelectedUser(user)
+                            setKycRequestId(user.latest_kyc_request_id || '')
+                            setShowKycModal(true)
+                          }}
+                          className="px-3 py-1.5 bg-yellow-700 hover:bg-yellow-600 text-white text-sm rounded-lg transition-colors"
+                        >
+                          View KYC
+                        </button>
+
                         <button
                           onClick={() => handleToggleUserStatus(user)}
                           className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
@@ -428,6 +528,141 @@ export default function AdminUsersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Simulation Modal */}
+      {showSimModal && selectedUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl border border-gray-700 w-full max-w-2xl">
+            <div className="p-6 border-b border-gray-700">
+              <h2 className="text-xl font-semibold text-white">Run Simulations</h2>
+              <p className="text-gray-400 text-sm mt-1">Run simulated actions for user: {selectedUser.email}</p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Simulated Deposit (€)</label>
+                  <input type="number" value={simDepositAmount} onChange={(e) => setSimDepositAmount(e.target.value)} placeholder="e.g. 50.00" className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none" />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Simulated Trade</label>
+                  <div className="flex gap-2 mb-2">
+                    <select value={simTradeAsset} onChange={(e) => setSimTradeAsset(e.target.value)} className="flex-1 px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white">
+                      <option>BTC</option>
+                      <option>ETH</option>
+                      <option>SOL</option>
+                      <option>BNB</option>
+                    </select>
+                    <select value={simTradeSide} onChange={(e) => setSimTradeSide(e.target.value as any)} className="w-28 px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white">
+                      <option value="buy">Buy</option>
+                      <option value="sell">Sell</option>
+                    </select>
+                  </div>
+                  <input type="number" value={simTradeAmount} onChange={(e) => setSimTradeAmount(e.target.value)} placeholder="Amount (e.g. 0.01)" className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Simulated Notification</label>
+                <input type="text" value={simNotificationTitle} onChange={(e) => setSimNotificationTitle(e.target.value)} placeholder="Title" className="mb-2 w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400" />
+                <textarea value={simNotificationBody} onChange={(e) => setSimNotificationBody(e.target.value)} placeholder="Body" rows={3} className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400"></textarea>
+              </div>
+
+              {simResults && (
+                <div className="p-4 bg-gray-700/40 rounded-lg">
+                  <h3 className="text-sm font-semibold text-white mb-2">Results</h3>
+                  <pre className="text-xs text-gray-200 overflow-auto max-h-40">{JSON.stringify(simResults, null, 2)}</pre>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-700 flex justify-end gap-3">
+              <button onClick={() => { setShowSimModal(false); setSelectedUser(null); setSimResults(null) }} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg">Cancel</button>
+              <button onClick={async () => {
+                if (!selectedUser) return
+                setSimLoading(true)
+                setSimResults(null)
+
+                const ops: any[] = []
+                if (simDepositAmount && parseFloat(simDepositAmount) > 0) {
+                  ops.push({ type: 'deposit', amount: parseFloat(simDepositAmount), reason: 'Admin simulation' })
+                }
+                if (simTradeAmount && parseFloat(simTradeAmount) > 0) {
+                  ops.push({ type: 'transaction', txType: 'trade', amount: parseFloat(simTradeAmount), currency: simTradeAsset, description: `Simulated ${simTradeSide} ${simTradeAsset}`, metadata: { side: simTradeSide, asset: simTradeAsset } })
+                }
+                if (simNotificationTitle || simNotificationBody) {
+                  ops.push({ type: 'notify', title: simNotificationTitle || 'Admin Simulation', body: simNotificationBody || 'This is a simulated notification.' })
+                }
+
+                try {
+                  const token = session?.access_token || ''
+
+                  const res = await fetch('/api/admin/simulate', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ target_user_id: selectedUser.id, operations: ops })
+                  })
+
+                  const data = await res.json()
+
+                  if (!res.ok) {
+                    setSimResults([{ success: false, error: data.error || 'Request failed' }])
+                    setToast({ type: 'error', message: data.error || 'Simulation failed' })
+                  } else {
+                    setSimResults(data.results || [{ success: true }])
+                    // Refresh user list to reflect any balance changes
+                    fetchUsers()
+                    setToast({ type: 'success', message: 'Simulations completed' })
+                  }
+                } catch (e) {
+                  setSimResults([{ success: false, error: String(e) }])
+                  setToast({ type: 'error', message: 'Simulation request failed' })
+                } finally {
+                  setSimLoading(false)
+                }
+
+              }} disabled={simLoading} className="px-4 py-2 bg-blue-800 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{simLoading ? 'Running...' : 'Run Simulations'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50 animate-fade-in ${
+          toast.type === 'success' 
+            ? 'bg-green-900/90 text-green-100 border border-green-700' 
+            : 'bg-red-900/90 text-red-100 border border-red-700'
+        }`}>
+          {toast.type === 'success' ? (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
+          <span>{toast.message}</span>
+          <button 
+            onClick={() => setToast(null)}
+            className="ml-2 hover:opacity-70 transition-opacity"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* KYC Review Modal */}
+      {showKycModal && kycRequestId && (
+        <KycReviewModal requestId={kycRequestId} onClose={() => { setShowKycModal(false); setKycRequestId(null) }} onUpdated={() => fetchUsers()} />
       )}
     </div>
   )

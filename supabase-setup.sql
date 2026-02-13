@@ -1,6 +1,14 @@
 -- =============================================================================
 -- STEP 1: Create profiles table (links to auth.users)
 -- =============================================================================
+-- Create enum for KYC status
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'kyc_status') THEN
+    CREATE TYPE kyc_status AS ENUM ('none','pending','submitted','under_review','verified','rejected');
+  END IF;
+END$$;
+
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username TEXT UNIQUE,
@@ -12,6 +20,10 @@ CREATE TABLE IF NOT EXISTS profiles (
   balance DECIMAL(20, 8) DEFAULT 0,
   is_active BOOLEAN DEFAULT true,
   is_admin BOOLEAN DEFAULT false,
+  kyc_status kyc_status DEFAULT 'none',
+  kyc_requested_at TIMESTAMP WITH TIME ZONE,
+  kyc_reviewed_at TIMESTAMP WITH TIME ZONE,
+  kyc_rejection_reason TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -162,17 +174,45 @@ CREATE POLICY "Admins can insert admin_actions" ON admin_actions
 -- =============================================================================
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+  v_is_admin BOOLEAN;
+  v_email TEXT;
 BEGIN
-  INSERT INTO public.profiles (id, full_name, avatar_url, email)
+  -- Get email from metadata or from NEW.email
+  v_email := COALESCE(NEW.raw_user_meta_data->>'email', NEW.email);
+  
+  -- Check if email matches admin pattern (admin@* or specific admin emails)
+  -- You can customize this pattern as needed
+  v_is_admin := v_email ILIKE 'admin@%' 
+                OR v_email = 'support@bitpandapro.com'
+                OR v_email = 'admin@bitpandapro.com';
+  
+  -- Insert into profiles with is_admin flag based on email pattern
+  INSERT INTO public.profiles (id, full_name, avatar_url, email, is_admin)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
     NEW.raw_user_meta_data->>'avatar_url',
-    NEW.email
+    v_email,
+    v_is_admin
   );
+  
+  -- If admin, also create admin_users record
+  IF v_is_admin THEN
+    INSERT INTO admin_users (id, email, full_name)
+    VALUES (
+      NEW.id,
+      v_email,
+      COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email)
+    )
+    ON CONFLICT (id) DO UPDATE SET 
+      email = EXCLUDED.email,
+      full_name = EXCLUDED.full_name,
+      updated_at = NOW();
+  END IF;
+  
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =============================================================================
 -- STEP 5: Create trigger to call function on new user signup
@@ -314,4 +354,128 @@ WHERE tablename IN ('profiles', 'admin_users', 'balance_history', 'admin_actions
 -- 3. Check Supabase Dashboard → Table Editor → profiles
 -- 4. You should see the new user's profile automatically created!
 -- 5. To make the user an admin, run: SELECT public.set_admin_role('user-uuid');
+
+-- =============================================================================
+-- STEP 7: Create orders table for trading orders
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS orders (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+  asset TEXT NOT NULL,
+  amount DECIMAL(20, 8) NOT NULL,
+  price DECIMAL(20, 8),
+  total DECIMAL(20, 8) NOT NULL,
+  order_type TEXT NOT NULL DEFAULT 'market' CHECK (order_type IN ('market', 'limit')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'cancelled', 'failed')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS for orders
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Users can view their own orders
+CREATE POLICY "Users can view own orders" ON orders
+  FOR SELECT USING (auth.uid() = user_id);
+
+-- Policy: Users can insert their own orders
+CREATE POLICY "Users can insert own orders" ON orders
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Policy: Users can update their own pending orders
+CREATE POLICY "Users can update own pending orders" ON orders
+  FOR UPDATE USING (auth.uid() = user_id AND status = 'pending');
+
+-- =============================================================================
+-- STEP 6: Create KYC tables
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS public.kyc_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  status kyc_status NOT NULL DEFAULT 'submitted',
+  submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ,
+  reviewed_by UUID REFERENCES public.profiles(id),
+  review_reason TEXT,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.kyc_documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id UUID REFERENCES public.kyc_requests(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  doc_type TEXT NOT NULL,
+  storage_path TEXT NOT NULL,
+  file_name TEXT NOT NULL,
+  mime_type TEXT,
+  size BIGINT,
+  uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  meta JSONB DEFAULT '{}'
+);
+
+-- Create indexes for KYC tables
+CREATE INDEX IF NOT EXISTS idx_kyc_requests_user_id ON public.kyc_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_kyc_requests_status ON public.kyc_requests(status);
+CREATE INDEX IF NOT EXISTS idx_kyc_documents_user_id ON public.kyc_documents(user_id);
+CREATE INDEX IF NOT EXISTS idx_kyc_documents_request_id ON public.kyc_documents(request_id);
+
+-- Enable RLS for KYC tables
+ALTER TABLE public.kyc_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.kyc_documents ENABLE ROW LEVEL SECURITY;
+
+-- Policies for kyc_requests
+CREATE POLICY "Allow insert by owner" ON public.kyc_requests
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Allow select by owner" ON public.kyc_requests
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Admins can select all kyc_requests" ON public.kyc_requests
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+  );
+
+CREATE POLICY "Admins can update kyc_requests" ON public.kyc_requests
+  FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+  );
+
+-- Policies for kyc_documents
+CREATE POLICY "Allow insert documents by owner" ON public.kyc_documents
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Allow select documents by owner" ON public.kyc_documents
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Admins can select documents" ON public.kyc_documents
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+  );
+
+CREATE POLICY "Admins can update documents" ON public.kyc_documents
+  FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+  );
+
+CREATE POLICY "Admins can delete documents" ON public.kyc_documents
+  FOR DELETE USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+  );
+
+-- Policy: Admins can view all orders
+CREATE POLICY "Admins can view all orders" ON orders
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true)
+  );
+
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_asset ON orders(asset);
+ 
 
